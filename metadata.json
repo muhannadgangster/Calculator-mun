@@ -1,0 +1,6 @@
+{
+  "name": "MUN Calculator",
+  "description": "Premium liquid glass calculator with normal and scientific modes, glassmorphism customization, themes, and history.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
