@@ -1,4 +1,4 @@
-name: Build and Upload Debug APK
+name: Build and Release Debug APK
 
 on:
   push:
@@ -7,9 +7,12 @@ on:
       - master
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
-  build:
-    name: Build Debug APK
+  build-and-release:
+    name: Build APK and Publish Release
     runs-on: ubuntu-latest
 
     steps:
@@ -46,9 +49,39 @@ jobs:
           echo "SUCCESS: Found debug APK at app/build/outputs/apk/debug/app-debug.apk"
           ls -lh app/build/outputs/apk/debug/app-debug.apk
 
-      - name: Upload Debug APK Artifact
+      - name: Prepare Calculator-debug.apk for Release
+        run: |
+          cp app/build/outputs/apk/debug/app-debug.apk Calculator-debug.apk
+          if [ ! -f "Calculator-debug.apk" ] || [ ! -s "Calculator-debug.apk" ]; then
+            echo "ERROR: Failed to prepare Calculator-debug.apk or file is empty."
+            exit 1
+          fi
+          echo "Verified Calculator-debug.apk: $(stat -c%s Calculator-debug.apk) bytes"
+
+      - name: Upload Debug APK Artifact (Backup)
         uses: actions/upload-artifact@v4
         with:
           name: Calculator-debug-APK
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: Calculator-debug.apk
           if-no-files-found: error
+
+      - name: Create GitHub Release and Attach APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "${{ github.run_attempt }}" -gt 1 ]; then
+            TAG="v1.0.${{ github.run_number }}-attempt${{ github.run_attempt }}"
+          else
+            TAG="v1.0.${{ github.run_number }}"
+          fi
+
+          TITLE="Calculator $TAG"
+          
+          echo "Creating GitHub Release with tag: $TAG"
+          gh release create "$TAG" "Calculator-debug.apk" \
+            --title "$TITLE" \
+            --notes "Automated release for commit \`${{ github.sha }}\`. Download **Calculator-debug.apk** below to install the MUN Calculator on your Android phone." \
+            --target "${{ github.sha }}" \
+            --latest
+
+          echo "GitHub Release $TAG created successfully with asset Calculator-debug.apk attached."
