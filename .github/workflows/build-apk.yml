@@ -68,6 +68,8 @@ jobs:
           echo "Temporary debug keystore verified."
 
       - name: Build debug APK
+        env:
+          GRADLE_OPTS: "-Djava.awt.headless=true"
         run: |
           gradle :app:assembleDebug --stacktrace --no-daemon
 
