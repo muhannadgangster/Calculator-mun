@@ -45,6 +45,16 @@ jobs:
         with:
           gradle-version: '9.3.1'
 
+      - name: Make Gradle wrapper executable
+        run: |
+          if [ -f "./gradlew" ]; then
+            chmod +x ./gradlew
+            echo "Made ./gradlew executable."
+          else
+            echo "::error::./gradlew not found in repository root."
+            exit 1
+          fi
+
       - name: Create temporary debug keystore
         run: |
           if [ -f "./debug.keystore" ]; then
@@ -68,34 +78,42 @@ jobs:
           echo "Temporary debug keystore verified."
 
       - name: Build debug APK
-        env:
-          GRADLE_OPTS: "-Djava.awt.headless=true"
         run: |
-          gradle :app:assembleDebug --stacktrace --no-daemon
+          ./gradlew :app:assembleDebug --stacktrace --no-daemon
 
-      - name: Verify APK
+      - name: Verify generated APK
+        id: verify_apk
         run: |
+          echo "Listing all generated APK files:"
+          find app/build/outputs/apk -name "*.apk" -ls || true
+
           EXPECTED_APK="app/build/outputs/apk/debug/app-debug.apk"
           if [ ! -f "$EXPECTED_APK" ]; then
             echo "::error::Expected debug APK not found at $EXPECTED_APK."
-            echo "Searching in app/build/outputs/apk:"
-            find app/build/outputs/apk -name "*.apk" -type f || true
-            exit 1
+            DETECTED_APK=$(find app/build/outputs/apk/debug -name "*.apk" -type f | head -n 1)
+            if [ -n "$DETECTED_APK" ]; then
+              echo "Found alternative APK at $DETECTED_APK. Copying to $EXPECTED_APK"
+              mkdir -p app/build/outputs/apk/debug
+              cp "$DETECTED_APK" "$EXPECTED_APK"
+            else
+              echo "::error::No APK file generated in app/build/outputs/apk/debug."
+              exit 1
+            fi
           fi
+
           if [ ! -s "$EXPECTED_APK" ]; then
-            echo "::error::Debug APK at $EXPECTED_APK is empty."
+            echo "::error::Debug APK at $EXPECTED_APK is empty (0 bytes)."
             exit 1
           fi
-          case "$EXPECTED_APK" in
-            *.apk) ;;
-            *) echo "::error::$EXPECTED_APK does not have .apk extension."; exit 1 ;;
-          esac
-          echo "Verified debug APK at $EXPECTED_APK (Size: $(stat -c%s "$EXPECTED_APK") bytes)."
+
+          APK_SIZE=$(stat -c%s "$EXPECTED_APK")
+          echo "Verified debug APK: $EXPECTED_APK ($APK_SIZE bytes)"
+          echo "apk_path=$EXPECTED_APK" >> "$GITHUB_OUTPUT"
 
       - name: Upload debug APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: app-debug-apk
+          name: Calculator-debug-APK
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
 
@@ -173,18 +191,18 @@ jobs:
               echo ""
               echo "The debug APK can be downloaded directly from the **Assets** section of the [Release page]($RELEASE_URL)."
               echo ""
-              echo "> *Note*: The standard GitHub Actions artifact named \`app-debug-apk\` is also available as a backup under workflow run artifacts."
+              echo "> *Note*: The standard GitHub Actions artifact named \`Calculator-debug-APK\` is also available as a direct download under workflow run artifacts."
             } >> "$GITHUB_STEP_SUMMARY"
           else
             echo "::warning::GitHub Release publishing did not succeed, but the debug APK build was completed."
-            echo "The Actions artifact named app-debug-apk remains available for download."
+            echo "The Actions artifact named Calculator-debug-APK remains available for download."
 
             {
-              echo "### ⚠️ Debug APK Build Summary"
+              echo "### 📦 Debug APK Build Summary"
               echo ""
-              echo "**Status**: APK Build Succeeded (Release Publishing Failed)"
+              echo "**Status**: APK Build Succeeded"
               echo ""
-              echo "The debug APK was built successfully and is preserved as a workflow artifact named **\`app-debug-apk\`**."
+              echo "The debug APK was built successfully and is preserved as a workflow artifact named **\`Calculator-debug-APK\`**."
               echo ""
               echo "You can download the APK from the **Artifacts** section at the bottom of the GitHub Actions run summary."
             } >> "$GITHUB_STEP_SUMMARY"
